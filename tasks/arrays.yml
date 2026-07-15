@@ -55,12 +55,22 @@
   - item.filesystem is defined
   - item.mountpoint is defined
 
-# Unmounting raid arrays in preparation of destroying
+# Unmounting raid arrays and remove from fstab in preparation of destroying
 - name: arrays | Unmounting Array(s)
   mount:
     name: "{{ item.mountpoint }}"
     src: "/dev/{{ item.name }}"
     state: "unmounted"
+  with_items: '{{ mdadm_arrays }}'
+  when:
+  - item.state|lower == "absent"
+  - item.mountpoint is defined
+
+- name: arrays | Remove  Array(s) from fstab
+  mount:
+    name: "{{ item.mountpoint }}"
+    src: "/dev/{{ item.name }}"
+    state: "absent_from_fstab"
   with_items: '{{ mdadm_arrays }}'
   when:
   - item.state|lower == "absent"
@@ -75,25 +85,16 @@
         item.state|lower == "absent" and
         array_check.results[0].rc == 0
 
-# Removing raid arrays
-- name: arrays | Removing Array(s)
-  command: "mdadm --remove /dev/{{ item.name }}"
-  register: "array_removed"
-  with_items: '{{ mdadm_arrays }}'
-  when: >
-        item.state|lower == "absent" and
-        array_check.results[0].rc == 0
-
 # Zeroing out the disk devices which were part of the raid array
 - name: arrays | Zeroing Out Array Devices
   command: "mdadm --zero-superblock {{ item.1 }}"
+  register: "array_removed"
   with_subelements:
     - '{{ mdadm_arrays }}'
     - devices
   when: >
         item.0.state|lower == "absent" and
-        array_check.results[0].rc == 0 and
-        array_removed.changed
+        array_check.results[0].rc == 0
 
 # Wiping out the disk devices which were part of the raid array
 - name: arrays | Wiping Out Array Devices
